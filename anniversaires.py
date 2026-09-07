@@ -34,6 +34,10 @@ def get_membres():
         params={"q": query},
         auth=(PAHEKO_USER, PAHEKO_PASSWORD)
     )
+    # Affichage du message d'erreur précis envoyé par Paheko si la requête échoue
+    if not response.ok:
+        print("Erreur retournée par Paheko :", response.text)
+        
     response.raise_for_status()
     return response.json()
 
