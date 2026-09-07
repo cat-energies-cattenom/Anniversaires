@@ -8,11 +8,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
-# 1. Chargement de la configuration
+# 1. Chargement de la configuration personnalisable
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
-# 2. Variables d'environnement GitHub Secrets
+# 2. Variables d'environnement récupérées depuis GitHub Secrets
 PAHEKO_URL = os.environ['PAHEKO_URL'].rstrip('/')
 PAHEKO_USER = os.environ['PAHEKO_USER']
 PAHEKO_PASSWORD = os.environ['PAHEKO_PASSWORD']
@@ -43,6 +43,7 @@ def get_membres():
     response.raise_for_status()
     data = response.json()
     
+    # Paheko renvoie parfois les résultats encapsulés dans une clé "results"
     if isinstance(data, dict) and "results" in data:
         return data["results"]
     return data
@@ -54,13 +55,12 @@ def envoyer_email(destinataire, prenom):
     msg['From'] = SENDER_EMAIL
     msg['To'] = destinataire
 
-    # Partie alternative HTML / Texte
     msg_alternative = MIMEMultipart("alternative")
     msg.attach(msg_alternative)
 
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
 
-    # HTML compatible Outlook avec bannière d'en-tête
+    # HTML compatible Outlook (bannière avec couleur de fond pour logo blanc/transparent)
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -92,9 +92,9 @@ def envoyer_email(destinataire, prenom):
     </html>
     """
 
-    msg_alternative.attach(MIMEText(html_content, "html", "utf-8"))
+    msg_alternative.attach(MIMEText(html_content, "html"))
 
-    # Récupération et intégration du logo
+    # Récupération et intégration du logo via CID (fichier local prioritaire)
     img_data = None
     
     # 1. Essai avec le fichier local 'logo.png' dans le dépôt
@@ -120,23 +120,14 @@ def envoyer_email(destinataire, prenom):
         except Exception as e:
             print(f"Avertissement : impossible de télécharger le logo depuis l'URL ({e})")
 
-    # Attachement de l'image au format MIME strict pour Outlook
+    # Attachement de l'image si elle a été récupérée
     if img_data:
         try:
-            # On force le sous-type "png"
-            img = MIMEImage(img_data, _subtype="png")
-            
-            # Suppression des en-têtes automatiques potentiellement problématiques
-            del img['Content-Type']
-            del img['Content-Disposition']
-            
-            # En-têtes stricts reconnus par Microsoft Outlook
-            img.add_header('Content-Type', 'image/png', name='logo.png')
+            img = MIMEImage(img_data)
             img.add_header('Content-ID', '<logo_asso>')
-            img.add_header('Content-Disposition', 'inline', filename='logo.png')
-            
+            img.add_header('Content-Disposition', 'inline', filename="logo.png")
             msg.attach(img)
-            print("Logo attaché avec succès au message (Format spécial Outlook).")
+            print("Logo attaché avec succès au message.")
         except Exception as e:
             print(f"Erreur lors de la création de l'image MIME : {e}")
 
