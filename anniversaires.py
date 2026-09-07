@@ -84,7 +84,7 @@ def main():
     
     for m in membres:
         d_naissance = m.get('date_naissance')
-        email = m.get('email')
+        email = m.get('mail_personnel')
         prenom = m.get('prenom', 'Adhérent')
 
         if d_naissance and email:
