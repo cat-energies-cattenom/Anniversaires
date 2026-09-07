@@ -5,8 +5,6 @@ Mode d'emploi :
 
 Pour changer le texte ou l'image plus tard :
 
-Se rendre sur le dépôt GitHub.
-
 Clic sur le fichier config.json.
 
 Clic sur l'icône Crayon (Edit).
