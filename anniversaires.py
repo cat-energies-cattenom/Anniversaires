@@ -89,11 +89,10 @@ def main():
     
     for m in membres:
         d_naissance = m.get('date_naissance')
-        email = m.get('mail_personnel')
+        email = m.get('mail_personnel')  # Récupère l'adresse via mail_personnel
         prenom = m.get('prenom', 'Adhérent')
 
         if d_naissance and email:
-            # Vérifie si le mois et le jour correspondent
             if d_naissance.endswith(today_str) or d_naissance[5:10] == today_str:
                 print(f"Envoi de l'anniversaire à {prenom} ({email})...")
                 envoyer_email(email, prenom)
