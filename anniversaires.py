@@ -27,14 +27,16 @@ today_str = today.strftime("%m-%d")
 
 def get_membres():
     """Récupère la liste des membres via l'API Paheko."""
-    # Requête SQL pour obtenir le prénom, le mail et la date de naissance
-    query = "SELECT prenom, mail_personnel, date_naissance FROM users_view WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
-    response = requests.get(
+    # Requête SQL
+    query = "SELECT prenom, mail_personnel, date_naissance FROM membres WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
+    
+    # Paheko attend un POST avec le champ 'sql'
+    response = requests.post(
         f"{PAHEKO_URL}/api/sql",
-        params={"q": query},
+        data={"sql": query},
         auth=(PAHEKO_USER, PAHEKO_PASSWORD)
     )
-    # Affichage du message d'erreur précis envoyé par Paheko si la requête échoue
+    
     if not response.ok:
         print("Erreur retournée par Paheko :", response.text)
         
