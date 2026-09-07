@@ -68,7 +68,11 @@ def envoyer_email(destinataire, prenom):
                     {corps_personnalise}
                 </td>
                 <td style="vertical-align: top; text-align: right; width: 120px;">
-                    <img src="{config['url_logo']}" alt="Logo" style="max-width: 100px; height: auto;">
+                    <img src="{config['url_logo']}" 
+     alt="Logo" 
+     width="100" 
+     border="0" 
+     style="display: block; width: 100px; max-width: 100px; height: auto; outline: none; text-decoration: none;">
                 </td>
             </tr>
         </table>
