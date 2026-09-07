@@ -8,11 +8,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
-# 1. Chargement de la configuration personnalisable
+# 1. Chargement de la configuration
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
-# 2. Variables d'environnement récupérées depuis GitHub Secrets
+# 2. Variables d'environnement GitHub Secrets
 PAHEKO_URL = os.environ['PAHEKO_URL'].rstrip('/')
 PAHEKO_USER = os.environ['PAHEKO_USER']
 PAHEKO_PASSWORD = os.environ['PAHEKO_PASSWORD']
@@ -23,116 +23,77 @@ SMTP_USER = os.environ['SMTP_USER']
 SMTP_PASSWORD = os.environ['SMTP_PASSWORD']
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', SMTP_USER)
 
-# 3. Récupération de la date du jour (MM-JJ)
-today = datetime.date.today()
-today_str = today.strftime("%m-%d")
+today_str = datetime.date.today().strftime("%m-%d")
 
 def get_membres():
     """Récupère la liste des membres via l'API Paheko."""
     query = "SELECT prenom, mail_personnel, date_naissance FROM users WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
-    
     response = requests.post(
         f"{PAHEKO_URL}/api/sql",
         data={"sql": query},
         auth=(PAHEKO_USER, PAHEKO_PASSWORD)
     )
-    
     if not response.ok:
         print("Erreur retournée par Paheko :", response.text)
-        
     response.raise_for_status()
     data = response.json()
-    
-    if isinstance(data, dict) and "results" in data:
-        return data["results"]
-    return data
+    return data.get("results", data) if isinstance(data, dict) else data
 
 def envoyer_email(destinataire, prenom):
-    """Envoie le mail avec structure CID compatible Outlook, cadre centré et texte aligné à gauche."""
-    # Structure MIME 'related' indispensable pour qu'Outlook associe le CID au HTML
+    """Envoie l'email en injectant les variables dans template.html."""
     msg_root = MIMEMultipart('related')
     msg_root['Subject'] = config['sujet']
     msg_root['From'] = SENDER_EMAIL
     msg_root['To'] = destinataire
 
-    # Sous-partie 'alternative' pour le contenu texte/HTML
     msg_alternative = MIMEMultipart('alternative')
     msg_root.attach(msg_alternative)
 
+    # 1. Préparation du texte HTML
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
 
-    # Structure HTML : Cadre centré (600px), logo centré, texte aligné à gauche
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-    </head>
-    <body style="margin:0; padding:0; background-color:#ffffff; font-family: Arial, sans-serif; color: #333333;">
-        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
-            <tr>
-                <td align="center" style="padding: 20px 10px;">
-                    <!-- Cadre centré de 600px -->
-                    <table border="0" cellpadding="0" cellspacing="0" width="600" style="width: 600px; border: 1px solid #e0e0e0; background-color: #ffffff; border-radius: 8px;">
-                        <!-- Logo centré en haut du cadre -->
-                        <tr>
-                            <td align="center" valign="top" style="padding: 30px 25px 10px 25px;">
-                                <img src="cid:logo_asso" alt="Logo" width="140" border="0" style="display: block; margin: 0 auto; width: 140px; height: auto; outline: none; text-decoration: none;">
-                            </td>
-                        </tr>
-                        <!-- Contenu du message aligné à gauche -->
-                        <tr>
-                            <td align="left" valign="top" style="padding: 15px 30px 30px 30px; font-size: 15px; line-height: 1.6; color: #333333; text-align: left;">
-                                {corps_personnalise}
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
+    # 2. Lecture et remplissage du fichier template.html
+    try:
+        with open('template.html', 'r', encoding='utf-8') as f:
+            template = f.read()
+        html_content = template.replace("{corps_personnalise}", corps_personnalise)
+    except Exception as e:
+        print(f"Erreur lors de la lecture de template.html : {e}")
+        return
 
     msg_alternative.attach(MIMEText(html_content, 'html', 'utf-8'))
 
-    # Chargement binaire du fichier logo.png
+    # 3. Chargement de l'image (local ou distant)
     img_data = None
     if os.path.exists("logo.png"):
         try:
             with open("logo.png", "rb") as f:
                 img_data = f.read()
-            print("Logo local 'logo.png' trouvé et chargé.")
         except Exception as e:
-            print(f"Erreur lors de la lecture du fichier local 'logo.png' : {e}")
+            print(f"Erreur lecture logo local : {e}")
 
-    # Secours via URL si le fichier local n'existe pas
     if img_data is None:
         try:
             url_logo = config.get('url_logo', '')
             if "github.com" in url_logo and "/blob/" in url_logo:
                 url_logo = url_logo.replace("/blob/", "/raw/")
-            
             req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req) as response:
                 img_data = response.read()
-            print("Logo téléchargé depuis l'URL externe.")
         except Exception as e:
-            print(f"Avertissement : impossible de télécharger le logo depuis l'URL ({e})")
+            print(f"Erreur chargement logo distant : {e}")
 
-    # Attachement MIMEImage direct sur msg_root (impératif pour Outlook)
+    # 4. Attachement de l'image via CID (logo_asso)
     if img_data:
         try:
             img = MIMEImage(img_data)
-            # Retrait des guillemets dans Content-ID pour compatibilité stricte Outlook
             img.add_header('Content-ID', '<logo_asso>')
             img.add_header('Content-Disposition', 'inline', filename="logo.png")
             msg_root.attach(img)
-            print("Logo embarqué avec succès via CID.")
         except Exception as e:
-            print(f"Erreur lors de la création de la pièce jointe inline : {e}")
+            print(f"Erreur attachement CID : {e}")
 
-    # Envoi du message via le serveur SMTP Infomaniak
+    # 5. Envoi du mail
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.ehlo()
         server.starttls()
