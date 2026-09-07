@@ -27,7 +27,6 @@ today_str = today.strftime("%m-%d")
 
 def get_membres():
     """Récupère la liste des membres via l'API Paheko."""
-    # Dans la base SQLite de Paheko, la table s'appelle 'users'
     query = "SELECT prenom, mail_personnel, date_naissance FROM users WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
     
     response = requests.post(
@@ -40,7 +39,12 @@ def get_membres():
         print("Erreur retournée par Paheko :", response.text)
         
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+    
+    # Paheko renvoie parfois les résultats dans une clé "results"
+    if isinstance(data, dict) and "results" in data:
+        return data["results"]
+    return data
 
 def envoyer_email(destinataire, prenom):
     """Envoie le mail au format HTML avec le logo en haut à droite."""
@@ -49,10 +53,8 @@ def envoyer_email(destinataire, prenom):
     msg['From'] = SENDER_EMAIL
     msg['To'] = destinataire
 
-    # Remplacement de la variable {prenom} dans le texte
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
 
-    # Mise en page HTML avec logo dans le coin supérieur droit
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -63,11 +65,9 @@ def envoyer_email(destinataire, prenom):
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; border: 1px solid #eee; padding: 20px;">
             <tr>
                 <td style="vertical-align: top;">
-                    <!-- Contenu du message -->
                     {corps_personnalise}
                 </td>
                 <td style="vertical-align: top; text-align: right; width: 120px;">
-                    <!-- Logo en haut à droite -->
                     <img src="{config['url_logo']}" alt="Logo" style="max-width: 100px; height: auto;">
                 </td>
             </tr>
@@ -79,7 +79,9 @@ def envoyer_email(destinataire, prenom):
     msg.attach(MIMEText(html_content, "html"))
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.ehlo()
         server.starttls()
+        server.ehlo()
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.sendmail(SENDER_EMAIL, destinataire, msg.as_string())
 
@@ -88,15 +90,17 @@ def main():
     count = 0
     
     for m in membres:
-        d_naissance = m.get('date_naissance')
-        email = m.get('mail_personnel')  # Récupère l'adresse via mail_personnel
-        prenom = m.get('prenom', 'Adhérent')
+        # S'assure que 'm' est bien un dictionnaire d'informations
+        if isinstance(m, dict):
+            d_naissance = str(m.get('date_naissance', ''))
+            email = m.get('mail_personnel')
+            prenom = m.get('prenom', 'Adhérent')
 
-        if d_naissance and email:
-            if d_naissance.endswith(today_str) or d_naissance[5:10] == today_str:
-                print(f"Envoi de l'anniversaire à {prenom} ({email})...")
-                envoyer_email(email, prenom)
-                count += 1
+            if d_naissance and email:
+                if d_naissance.endswith(today_str) or today_str in d_naissance:
+                    print(f"Envoi de l'anniversaire à {prenom} ({email})...")
+                    envoyer_email(email, prenom)
+                    count += 1
 
     print(f"Terminé. {count} mail(s) envoyé(s).")
 
