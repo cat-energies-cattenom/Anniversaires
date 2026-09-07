@@ -43,13 +43,12 @@ def get_membres():
     response.raise_for_status()
     data = response.json()
     
-    # Paheko renvoie parfois les résultats encapsulés dans une clé "results"
     if isinstance(data, dict) and "results" in data:
         return data["results"]
     return data
 
 def envoyer_email(destinataire, prenom):
-    """Envoie le mail avec structure HTML compatible Outlook et logo embarqué."""
+    """Envoie le mail avec le logo centré au-dessus du message."""
     msg = MIMEMultipart("related")
     msg['Subject'] = config['sujet']
     msg['From'] = SENDER_EMAIL
@@ -60,7 +59,7 @@ def envoyer_email(destinataire, prenom):
 
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
 
-    # HTML compatible Outlook (bannière avec couleur de fond pour logo blanc/transparent)
+    # Structure HTML sans bannière d'en-tête, avec logo centré au-dessus du texte
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -70,17 +69,17 @@ def envoyer_email(destinataire, prenom):
     <body style="margin:0; padding:0; background-color:#ffffff; font-family: Arial, sans-serif; color: #333333;">
         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
             <tr>
-                <td align="center" style="padding: 10px;">
-                    <table border="0" cellpadding="0" cellspacing="0" width="600" style="width: 600px; border: 1px solid #e0e0e0; background-color: #ffffff;">
-                        <!-- Bannière d'en-tête avec fond sombre pour faire ressortir le logo -->
+                <td align="center" style="padding: 20px 10px;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="600" style="width: 600px; border: 1px solid #e0e0e0; background-color: #ffffff; border-radius: 8px;">
+                        <!-- Logo centré en haut -->
                         <tr>
-                            <td align="right" valign="top" bgcolor="#1a2b4c" style="background-color: #1a2b4c; padding: 15px;">
-                                <img src="cid:logo_asso" alt="Logo" width="120" height="auto" border="0" style="display: block; width: 120px; height: auto; outline: none; text-decoration: none;">
+                            <td align="center" valign="top" style="padding: 30px 25px 10px 25px;">
+                                <img src="cid:logo_asso" alt="Logo" width="140" height="auto" border="0" style="display: block; margin: 0 auto; width: 140px; height: auto; outline: none; text-decoration: none;">
                             </td>
                         </tr>
-                        <!-- Contenu du message -->
+                        <!-- Contenu du message centré -->
                         <tr>
-                            <td valign="top" style="padding: 25px; font-size: 15px; line-height: 1.6; color: #333333;">
+                            <td align="center" valign="top" style="padding: 15px 30px 30px 30px; font-size: 15px; line-height: 1.6; color: #333333; text-align: center;">
                                 {corps_personnalise}
                             </td>
                         </tr>
@@ -94,10 +93,9 @@ def envoyer_email(destinataire, prenom):
 
     msg_alternative.attach(MIMEText(html_content, "html"))
 
-    # Récupération et intégration du logo via CID (fichier local prioritaire)
+    # Récupération et intégration du logo via CID
     img_data = None
     
-    # 1. Essai avec le fichier local 'logo.png' dans le dépôt
     if os.path.exists("logo.png"):
         try:
             with open("logo.png", "rb") as f:
@@ -106,7 +104,6 @@ def envoyer_email(destinataire, prenom):
         except Exception as e:
             print(f"Erreur lors de la lecture du fichier local 'logo.png' : {e}")
 
-    # 2. Secours : Téléchargement via URL si le fichier local n'existe pas
     if img_data is None:
         try:
             url_logo = config.get('url_logo', '')
@@ -120,7 +117,6 @@ def envoyer_email(destinataire, prenom):
         except Exception as e:
             print(f"Avertissement : impossible de télécharger le logo depuis l'URL ({e})")
 
-    # Attachement de l'image si elle a été récupérée
     if img_data:
         try:
             img = MIMEImage(img_data)
@@ -131,7 +127,7 @@ def envoyer_email(destinataire, prenom):
         except Exception as e:
             print(f"Erreur lors de la création de l'image MIME : {e}")
 
-    # Envoi de l'e-mail via le serveur SMTP
+    # Envoi du message
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.ehlo()
         server.starttls()
