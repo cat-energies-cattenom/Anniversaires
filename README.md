@@ -1,6 +1,8 @@
 # Anniversaires
 Scripts et fichiers nécessaires à l'envoi de mails pour souhaiter les anniversaires des adhérents
-Mode d'emploi
+
+Mode d'emploi :
+
 Pour changer le texte ou l'image plus tard :
 
 Se rendre sur le dépôt GitHub.
