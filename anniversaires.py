@@ -3,6 +3,8 @@ import json
 import datetime
 import smtplib
 import requests
+import urllib.request
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -47,14 +49,19 @@ def get_membres():
     return data
 
 def envoyer_email(destinataire, prenom):
-    """Envoie le mail au format HTML avec le logo en haut à droite."""
-    msg = MIMEMultipart("alternative")
+    """Envoie le mail au format HTML avec logo embarqué CID pour Outlook."""
+    msg = MIMEMultipart("related")  # "related" permet d'intégrer des pièces jointes liées (images CID)
     msg['Subject'] = config['sujet']
     msg['From'] = SENDER_EMAIL
     msg['To'] = destinataire
 
+    # Partie alternative HTML / Texte
+    msg_alternative = MIMEMultipart("alternative")
+    msg.attach(msg_alternative)
+
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
 
+    # Note la référence 'cid:logo_asso' dans le src de l'image
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -68,11 +75,7 @@ def envoyer_email(destinataire, prenom):
                     {corps_personnalise}
                 </td>
                 <td style="vertical-align: top; text-align: right; width: 120px;">
-                    <img src="{config['url_logo']}" 
-     alt="Logo" 
-     width="100" 
-     border="0" 
-     style="display: block; width: 100px; max-width: 100px; height: auto; outline: none; text-decoration: none;">
+                    <img src="cid:logo_asso" alt="Logo" width="100" border="0" style="display: block; width: 100px;">
                 </td>
             </tr>
         </table>
@@ -80,8 +83,22 @@ def envoyer_email(destinataire, prenom):
     </html>
     """
 
-    msg.attach(MIMEText(html_content, "html"))
+    msg_alternative.attach(MIMEText(html_content, "html"))
 
+    # Téléchargement et intégration de l'image du logo dans l'e-mail
+    try:
+        url_logo = config['url_logo']
+        req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            img_data = response.read()
+            img = MIMEImage(img_data)
+            img.add_header('Content-ID', '<logo_asso>')
+            img.add_header('Content-Disposition', 'inline', filename="logo.png")
+            msg.attach(img)
+    except Exception as e:
+        print(f"Avertissement : impossible d'embarquer le logo ({e})")
+
+    # Envoi du message
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.ehlo()
         server.starttls()
