@@ -28,7 +28,7 @@ today_str = today.strftime("%m-%d")
 def get_membres():
     """Récupère la liste des membres via l'API Paheko."""
     # Requête SQL pour obtenir le prénom, le mail et la date de naissance
-    query = "SELECT prenom, mail_personnel, date_naissance FROM users WHERE email IS NOT NULL AND date_naissance IS NOT NULL;"
+    query = "SELECT prenom, mail_personnel, date_naissance FROM users WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
     response = requests.get(
         f"{PAHEKO_URL}/api/sql",
         params={"q": query},
