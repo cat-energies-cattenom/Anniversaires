@@ -75,7 +75,7 @@ def get_logo_base64():
     return ""
 
 def envoyer_email(destinataire, prenom):
-    """Envoie le mail avec le logo codé en Base64 centré au-dessus du message."""
+    """Envoie le mail avec le cadre centré, le logo centré et le texte aligné à gauche."""
     msg = MIMEMultipart("alternative")
     msg['Subject'] = config['sujet']
     msg['From'] = SENDER_EMAIL
@@ -84,10 +84,10 @@ def envoyer_email(destinataire, prenom):
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
     logo_src = get_logo_base64()
 
-    # Balise image uniquement si le logo a pu être chargé
+    # Balise image avec logo centré
     logo_html = f'<img src="{logo_src}" alt="Logo" width="140" border="0" style="display: block; margin: 0 auto; width: 140px; height: auto; outline: none; text-decoration: none;">' if logo_src else ''
 
-    # Structure HTML sans pièce jointe, logo codé directement dans le HTML
+    # Structure HTML : Cadre centré, logo centré, texte aligné à gauche
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -98,16 +98,17 @@ def envoyer_email(destinataire, prenom):
         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
             <tr>
                 <td align="center" style="padding: 20px 10px;">
+                    <!-- Cadre centré de 600px -->
                     <table border="0" cellpadding="0" cellspacing="0" width="600" style="width: 600px; border: 1px solid #e0e0e0; background-color: #ffffff; border-radius: 8px;">
-                        <!-- Logo codé en HTML/Base64 centré -->
+                        <!-- Logo centré en haut du cadre -->
                         <tr>
                             <td align="center" valign="top" style="padding: 30px 25px 10px 25px;">
                                 {logo_html}
                             </td>
                         </tr>
-                        <!-- Contenu du message centré -->
+                        <!-- Contenu du message aligné à gauche -->
                         <tr>
-                            <td align="center" valign="top" style="padding: 15px 30px 30px 30px; font-size: 15px; line-height: 1.6; color: #333333; text-align: center;">
+                            <td align="left" valign="top" style="padding: 15px 30px 30px 30px; font-size: 15px; line-height: 1.6; color: #333333; text-align: left;">
                                 {corps_personnalise}
                             </td>
                         </tr>
