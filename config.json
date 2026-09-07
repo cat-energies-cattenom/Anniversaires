@@ -1,5 +1,5 @@
 {
   "sujet": "Joyeux anniversaire de la part de CAT Energies !",
-  "url_logo": "https://github.com/cat-energies-cattenom/Anniversaires/blob/main/Logo%20CAT%20Energies_Blanc.png",
+  "url_logo": "https://github.com/cat-energies-cattenom/Anniversaires/raw/main/Logo%20CAT%20Energies_Blanc.png",
   "texte_html": "<p>Bonjour <strong>{prenom}</strong>,</p><p>Toute l'équipe de Cat Energies te souhaite un <strong>très joyeux anniversaire</strong> !</p><p>Merci pour ta fidélité et à très bientôt.</p><p>Amicalement,<br>CAT Energies</p>"
 }
