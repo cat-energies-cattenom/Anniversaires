@@ -8,11 +8,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
-# 1. Chargement de la configuration
+# 1. Chargement de la configuration personnalisable
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
-# 2. Variables d'environnement GitHub Secrets
+# 2. Variables d'environnement récupérées depuis GitHub Secrets
 PAHEKO_URL = os.environ['PAHEKO_URL'].rstrip('/')
 PAHEKO_USER = os.environ['PAHEKO_USER']
 PAHEKO_PASSWORD = os.environ['PAHEKO_PASSWORD']
@@ -23,12 +23,12 @@ SMTP_USER = os.environ['SMTP_USER']
 SMTP_PASSWORD = os.environ['SMTP_PASSWORD']
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', SMTP_USER)
 
-# 3. Date du jour (MM-JJ)
+# 3. Récupération de la date du jour (MM-JJ)
 today = datetime.date.today()
 today_str = today.strftime("%m-%d")
 
 def get_membres():
-    """Récupère la liste des membres depuis Paheko."""
+    """Récupère la liste des membres via l'API Paheko."""
     query = "SELECT prenom, mail_personnel, date_naissance FROM users WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
     
     response = requests.post(
@@ -43,12 +43,13 @@ def get_membres():
     response.raise_for_status()
     data = response.json()
     
+    # Paheko renvoie parfois les résultats encapsulés dans une clé "results"
     if isinstance(data, dict) and "results" in data:
         return data["results"]
     return data
 
 def envoyer_email(destinataire, prenom):
-    """Envoie le mail avec structure HTML compatible avec le moteur Word d'Outlook."""
+    """Envoie le mail avec structure HTML compatible Outlook et logo embarqué."""
     msg = MIMEMultipart("related")
     msg['Subject'] = config['sujet']
     msg['From'] = SENDER_EMAIL
@@ -59,7 +60,7 @@ def envoyer_email(destinataire, prenom):
 
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
 
-    # HTML optimisé avec attributs 'width', 'align', 'bgcolor' compatibles Outlook
+    # HTML compatible Outlook (bannière avec couleur de fond pour logo blanc/transparent)
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -71,13 +72,13 @@ def envoyer_email(destinataire, prenom):
             <tr>
                 <td align="center" style="padding: 10px;">
                     <table border="0" cellpadding="0" cellspacing="0" width="600" style="width: 600px; border: 1px solid #e0e0e0; background-color: #ffffff;">
-                        <!-- Ligne d'en-tête avec logo -->
+                        <!-- Bannière d'en-tête avec fond sombre pour faire ressortir le logo -->
                         <tr>
                             <td align="right" valign="top" bgcolor="#1a2b4c" style="background-color: #1a2b4c; padding: 15px;">
-                                <img src="cid:logo_asso" alt="Logo CAT Energies" width="120" height="auto" border="0" style="display: block; width: 120px; height: auto; outline: none; text-decoration: none;">
+                                <img src="cid:logo_asso" alt="Logo" width="120" height="auto" border="0" style="display: block; width: 120px; height: auto; outline: none; text-decoration: none;">
                             </td>
                         </tr>
-                        <!-- Ligne de contenu -->
+                        <!-- Contenu du message -->
                         <tr>
                             <td valign="top" style="padding: 25px; font-size: 15px; line-height: 1.6; color: #333333;">
                                 {corps_personnalise}
@@ -93,24 +94,44 @@ def envoyer_email(destinataire, prenom):
 
     msg_alternative.attach(MIMEText(html_content, "html"))
 
-    # Récupération et intégration du logo via CID
-    url_logo = config['url_logo']
-    # Correction automatique de l'URL si elle pointe vers la page d'affichage GitHub au lieu du contenu brut
-    if "github.com" in url_logo and "/blob/" in url_logo:
-        url_logo = url_logo.replace("/blob/", "/raw/")
+    # Récupération et intégration du logo via CID (fichier local prioritaire)
+    img_data = None
+    
+    # 1. Essai avec le fichier local 'logo.png' dans le dépôt
+    if os.path.exists("logo.png"):
+        try:
+            with open("logo.png", "rb") as f:
+                img_data = f.read()
+            print("Logo local 'logo.png' trouvé et chargé.")
+        except Exception as e:
+            print(f"Erreur lors de la lecture du fichier local 'logo.png' : {e}")
 
-    try:
-        req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            img_data = response.read()
+    # 2. Secours : Téléchargement via URL si le fichier local n'existe pas
+    if img_data is None:
+        try:
+            url_logo = config.get('url_logo', '')
+            if "github.com" in url_logo and "/blob/" in url_logo:
+                url_logo = url_logo.replace("/blob/", "/raw/")
+            
+            req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response:
+                img_data = response.read()
+            print("Logo téléchargé depuis l'URL externe.")
+        except Exception as e:
+            print(f"Avertissement : impossible de télécharger le logo depuis l'URL ({e})")
+
+    # Attachement de l'image si elle a été récupérée
+    if img_data:
+        try:
             img = MIMEImage(img_data)
             img.add_header('Content-ID', '<logo_asso>')
             img.add_header('Content-Disposition', 'inline', filename="logo.png")
             msg.attach(img)
-            print("Logo récupéré et attaché avec succès.")
-    except Exception as e:
-        print(f"Avertissement : impossible de télécharger le logo depuis {url_logo} ({e})")
+            print("Logo attaché avec succès au message.")
+        except Exception as e:
+            print(f"Erreur lors de la création de l'image MIME : {e}")
 
+    # Envoi de l'e-mail via le serveur SMTP
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.ehlo()
         server.starttls()
