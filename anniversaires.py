@@ -27,10 +27,9 @@ today_str = today.strftime("%m-%d")
 
 def get_membres():
     """Récupère la liste des membres via l'API Paheko."""
-    # Requête SQL
-    query = "SELECT prenom, mail_personnel, date_naissance FROM membres WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
+    # Dans la base SQLite de Paheko, la table s'appelle 'users'
+    query = "SELECT prenom, mail_personnel, date_naissance FROM users WHERE mail_personnel IS NOT NULL AND date_naissance IS NOT NULL;"
     
-    # Paheko attend un POST avec le champ 'sql'
     response = requests.post(
         f"{PAHEKO_URL}/api/sql",
         data={"sql": query},
