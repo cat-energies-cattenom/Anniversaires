@@ -4,9 +4,9 @@ import datetime
 import smtplib
 import requests
 import urllib.request
+import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.image import MIMEImage
 
 # 1. Chargement de la configuration personnalisable
 with open('config.json', 'r', encoding='utf-8') as f:
@@ -47,19 +47,47 @@ def get_membres():
         return data["results"]
     return data
 
+def get_logo_base64():
+    """Convertit le fichier logo.png local en chaîne Base64 pour l'intégrer dans le HTML."""
+    if os.path.exists("logo.png"):
+        try:
+            with open("logo.png", "rb") as f:
+                encoded = base64.b64encode(f.read()).decode('utf-8')
+                print("Logo local converti en Base64 avec succès.")
+                return f"data:image/png;base64,{encoded}"
+        except Exception as e:
+            print(f"Erreur lors de la conversion du logo local : {e}")
+            
+    # Secours : tentative depuis l'URL dans config.json si logo.png n'est pas trouvé
+    try:
+        url_logo = config.get('url_logo', '')
+        if "github.com" in url_logo and "/blob/" in url_logo:
+            url_logo = url_logo.replace("/blob/", "/raw/")
+        
+        req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            encoded = base64.b64encode(response.read()).decode('utf-8')
+            print("Logo distant téléchargé et converti en Base64 avec succès.")
+            return f"data:image/png;base64,{encoded}"
+    except Exception as e:
+        print(f"Avertissement : impossible d'obtenir le logo ({e})")
+        
+    return ""
+
 def envoyer_email(destinataire, prenom):
-    """Envoie le mail avec le logo centré au-dessus du message."""
-    msg = MIMEMultipart("related")
+    """Envoie le mail avec le logo codé en Base64 centré au-dessus du message."""
+    msg = MIMEMultipart("alternative")
     msg['Subject'] = config['sujet']
     msg['From'] = SENDER_EMAIL
     msg['To'] = destinataire
 
-    msg_alternative = MIMEMultipart("alternative")
-    msg.attach(msg_alternative)
-
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
+    logo_src = get_logo_base64()
 
-    # Structure HTML sans bannière d'en-tête, avec logo centré au-dessus du texte
+    # Balise image uniquement si le logo a pu être chargé
+    logo_html = f'<img src="{logo_src}" alt="Logo" width="140" border="0" style="display: block; margin: 0 auto; width: 140px; height: auto; outline: none; text-decoration: none;">' if logo_src else ''
+
+    # Structure HTML sans pièce jointe, logo codé directement dans le HTML
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -71,10 +99,10 @@ def envoyer_email(destinataire, prenom):
             <tr>
                 <td align="center" style="padding: 20px 10px;">
                     <table border="0" cellpadding="0" cellspacing="0" width="600" style="width: 600px; border: 1px solid #e0e0e0; background-color: #ffffff; border-radius: 8px;">
-                        <!-- Logo centré en haut -->
+                        <!-- Logo codé en HTML/Base64 centré -->
                         <tr>
                             <td align="center" valign="top" style="padding: 30px 25px 10px 25px;">
-                                <img src="cid:logo_asso" alt="Logo" width="140" height="auto" border="0" style="display: block; margin: 0 auto; width: 140px; height: auto; outline: none; text-decoration: none;">
+                                {logo_html}
                             </td>
                         </tr>
                         <!-- Contenu du message centré -->
@@ -91,41 +119,7 @@ def envoyer_email(destinataire, prenom):
     </html>
     """
 
-    msg_alternative.attach(MIMEText(html_content, "html"))
-
-    # Récupération et intégration du logo via CID
-    img_data = None
-    
-    if os.path.exists("logo.png"):
-        try:
-            with open("logo.png", "rb") as f:
-                img_data = f.read()
-            print("Logo local 'logo.png' trouvé et chargé.")
-        except Exception as e:
-            print(f"Erreur lors de la lecture du fichier local 'logo.png' : {e}")
-
-    if img_data is None:
-        try:
-            url_logo = config.get('url_logo', '')
-            if "github.com" in url_logo and "/blob/" in url_logo:
-                url_logo = url_logo.replace("/blob/", "/raw/")
-            
-            req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req) as response:
-                img_data = response.read()
-            print("Logo téléchargé depuis l'URL externe.")
-        except Exception as e:
-            print(f"Avertissement : impossible de télécharger le logo depuis l'URL ({e})")
-
-    if img_data:
-        try:
-            img = MIMEImage(img_data)
-            img.add_header('Content-ID', '<logo_asso>')
-            img.add_header('Content-Disposition', 'inline', filename="logo.png")
-            msg.attach(img)
-            print("Logo attaché avec succès au message.")
-        except Exception as e:
-            print(f"Erreur lors de la création de l'image MIME : {e}")
+    msg.attach(MIMEText(html_content, "html"))
 
     # Envoi du message
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
