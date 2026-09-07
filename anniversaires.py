@@ -4,9 +4,9 @@ import datetime
 import smtplib
 import requests
 import urllib.request
-import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 
 # 1. Chargement de la configuration personnalisable
 with open('config.json', 'r', encoding='utf-8') as f:
@@ -47,47 +47,21 @@ def get_membres():
         return data["results"]
     return data
 
-def get_logo_base64():
-    """Convertit le fichier logo.png local en chaîne Base64 pour l'intégrer dans le HTML."""
-    if os.path.exists("logo.png"):
-        try:
-            with open("logo.png", "rb") as f:
-                encoded = base64.b64encode(f.read()).decode('utf-8')
-                print("Logo local converti en Base64 avec succès.")
-                return f"data:image/png;base64,{encoded}"
-        except Exception as e:
-            print(f"Erreur lors de la conversion du logo local : {e}")
-            
-    # Secours : tentative depuis l'URL dans config.json si logo.png n'est pas trouvé
-    try:
-        url_logo = config.get('url_logo', '')
-        if "github.com" in url_logo and "/blob/" in url_logo:
-            url_logo = url_logo.replace("/blob/", "/raw/")
-        
-        req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            encoded = base64.b64encode(response.read()).decode('utf-8')
-            print("Logo distant téléchargé et converti en Base64 avec succès.")
-            return f"data:image/png;base64,{encoded}"
-    except Exception as e:
-        print(f"Avertissement : impossible d'obtenir le logo ({e})")
-        
-    return ""
-
 def envoyer_email(destinataire, prenom):
-    """Envoie le mail avec le cadre centré, le logo centré et le texte aligné à gauche."""
-    msg = MIMEMultipart("alternative")
-    msg['Subject'] = config['sujet']
-    msg['From'] = SENDER_EMAIL
-    msg['To'] = destinataire
+    """Envoie le mail avec structure CID compatible Outlook, cadre centré et texte aligné à gauche."""
+    # Structure MIME 'related' indispensable pour qu'Outlook associe le CID au HTML
+    msg_root = MIMEMultipart('related')
+    msg_root['Subject'] = config['sujet']
+    msg_root['From'] = SENDER_EMAIL
+    msg_root['To'] = destinataire
+
+    # Sous-partie 'alternative' pour le contenu texte/HTML
+    msg_alternative = MIMEMultipart('alternative')
+    msg_root.attach(msg_alternative)
 
     corps_personnalise = config['texte_html'].replace("{prenom}", prenom)
-    logo_src = get_logo_base64()
 
-    # Balise image avec logo centré
-    logo_html = f'<img src="{logo_src}" alt="Logo" width="140" border="0" style="display: block; margin: 0 auto; width: 140px; height: auto; outline: none; text-decoration: none;">' if logo_src else ''
-
-    # Structure HTML : Cadre centré, logo centré, texte aligné à gauche
+    # Structure HTML : Cadre centré (600px), logo centré, texte aligné à gauche
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -103,7 +77,7 @@ def envoyer_email(destinataire, prenom):
                         <!-- Logo centré en haut du cadre -->
                         <tr>
                             <td align="center" valign="top" style="padding: 30px 25px 10px 25px;">
-                                {logo_html}
+                                <img src="cid:logo_asso" alt="Logo" width="140" border="0" style="display: block; margin: 0 auto; width: 140px; height: auto; outline: none; text-decoration: none;">
                             </td>
                         </tr>
                         <!-- Contenu du message aligné à gauche -->
@@ -120,15 +94,51 @@ def envoyer_email(destinataire, prenom):
     </html>
     """
 
-    msg.attach(MIMEText(html_content, "html"))
+    msg_alternative.attach(MIMEText(html_content, 'html', 'utf-8'))
 
-    # Envoi du message
+    # Chargement binaire du fichier logo.png
+    img_data = None
+    if os.path.exists("logo.png"):
+        try:
+            with open("logo.png", "rb") as f:
+                img_data = f.read()
+            print("Logo local 'logo.png' trouvé et chargé.")
+        except Exception as e:
+            print(f"Erreur lors de la lecture du fichier local 'logo.png' : {e}")
+
+    # Secours via URL si le fichier local n'existe pas
+    if img_data is None:
+        try:
+            url_logo = config.get('url_logo', '')
+            if "github.com" in url_logo and "/blob/" in url_logo:
+                url_logo = url_logo.replace("/blob/", "/raw/")
+            
+            req = urllib.request.Request(url_logo, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response:
+                img_data = response.read()
+            print("Logo téléchargé depuis l'URL externe.")
+        except Exception as e:
+            print(f"Avertissement : impossible de télécharger le logo depuis l'URL ({e})")
+
+    # Attachement MIMEImage direct sur msg_root (impératif pour Outlook)
+    if img_data:
+        try:
+            img = MIMEImage(img_data)
+            # Retrait des guillemets dans Content-ID pour compatibilité stricte Outlook
+            img.add_header('Content-ID', '<logo_asso>')
+            img.add_header('Content-Disposition', 'inline', filename="logo.png")
+            msg_root.attach(img)
+            print("Logo embarqué avec succès via CID.")
+        except Exception as e:
+            print(f"Erreur lors de la création de la pièce jointe inline : {e}")
+
+    # Envoi du message via le serveur SMTP Infomaniak
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.ehlo()
         server.starttls()
         server.ehlo()
         server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SENDER_EMAIL, destinataire, msg.as_string())
+        server.sendmail(SENDER_EMAIL, destinataire, msg_root.as_string())
 
 def main():
     membres = get_membres()
